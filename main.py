@@ -1,9 +1,19 @@
+from typing import Optional
+
+from starlette.requests import Request
+from starlette.responses import Response
 from fastapi import FastAPI
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup():
+    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
 
 
 @app.get("/")
@@ -56,6 +66,30 @@ async def increment_count_in_memory_cache():
     return {"value": next_value}
 
 
-@app.on_event("startup")
-async def startup():
-    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+def custom_key_builder(
+    func,
+    namespace: Optional[str] = "",
+    request: Request = None,
+    response: Response = None,
+    *args,
+    **kwargs,
+):
+    prefix = FastAPICache.get_prefix()
+    print(kwargs)
+    cache_key = f"{prefix}{kwargs['kwargs']['name']}"
+    return cache_key
+
+
+@cache(expire=100, key_builder=custom_key_builder)
+async def get_or_create_user(name, info: Optional[dict] = None):
+    return info
+
+
+@app.post("/users")
+async def create_a_user(req_body: dict):
+    return await get_or_create_user(name=req_body["name"], info=req_body)
+
+
+@app.get("/users/{name}")
+async def create_a_user(name: str):
+    return await get_or_create_user(name=name)
